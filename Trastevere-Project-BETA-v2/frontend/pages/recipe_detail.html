@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle de receta - Trastevere</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="apple-touch-icon" href="/storage/images/touch-icon.png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='recipe_detail.css') }}">
+</head>
+<body>
+
+{% include 'top_bar.html' %}
+
+<div class="recipe-detail" id="recipe-detail"></div>
+
+<!-- Lightbox -->
+<div id="lightbox" style="display:none;" onclick="closeLightbox(event)">
+    <div class="lightbox-overlay"></div>
+    <button class="lightbox-arrow left" onclick="lightboxNav(-1);event.stopPropagation();">
+        <i class="fas fa-chevron-left"></i>
+    </button>
+    <img id="lightbox-img" src="" alt="">
+    <button class="lightbox-arrow right" onclick="lightboxNav(1);event.stopPropagation();">
+        <i class="fas fa-chevron-right"></i>
+    </button>
+    <button class="lightbox-close" onclick="closeLightbox()">
+        <i class="fas fa-times"></i>
+    </button>
+    <div id="lightbox-dots" class="lightbox-dots"></div>
+</div>
+
+<!-- Modal edición — estático en el DOM -->
+<div id="edit-modal" class="modal" style="display:none;">
+    <div class="modal-content edit-modal-content" style="position:relative;">
+        <button class="modal-close-btn" onclick="window.closeEditModal()"><i class="fas fa-times"></i></button>
+        <h3>Editar receta</h3>
+        <input id="edit-title" class="edit-input" placeholder="Título">
+        <textarea id="edit-description" class="edit-textarea" placeholder="Descripción"></textarea>
+        <label class="edit-label">Ingredientes (uno por línea)</label>
+        <textarea id="edit-ingredients" class="edit-textarea" rows="5"></textarea>
+        <label class="edit-label">Pasos (uno por línea)</label>
+        <textarea id="edit-steps" class="edit-textarea" rows="5"></textarea>
+        <label class="edit-label">Tags (separados por coma)</label>
+        <input id="edit-tags" class="edit-input" placeholder="pasta, italiano">
+        <button class="save-btn" onclick="window.saveEdit()" style="width:100%;margin-top:12px;">
+            <i class="fas fa-check"></i> Guardar cambios
+        </button>
+    </div>
+</div>
+
+{% include 'bottom_bar.html' %}
+
+<script>
+async function loadRecipe() {
+    const path = window.location.pathname.split('/');
+    const id = path[path.length - 1];
+
+    const response = await fetch('/publications/' + id);
+    const data = await response.json();
+    const container = document.getElementById('recipe-detail');
+
+    if (data.error) {
+        container.innerHTML = '<p style="text-align:center;margin-top:60px;color:#888;">' + t('recipe.notFound') + '</p>';
+        return;
+    }
+
+    // Si es un borrador, redirigir a create con los datos precargados
+    const draftTags = data.tags || [];
+    if (draftTags.includes('draft')) {
+        sessionStorage.setItem('draft_data', JSON.stringify({
+            id:          data.id,
+            title:       data.title,
+            description: data.description,
+            ingredients: data.ingredients || [],
+            steps:       data.steps || [],
+            tags:        draftTags.filter(tag => tag !== 'draft'),
+            images:      data.images || []
+        }));
+        window.location.href = '/create?draft=' + data.id;
+        return;
+    }
+
+    const photos = data.images || [];
+    const img1 = photos[0] || '/storage/images/default_photo.jpg';
+    setTimeout(() => initLightbox(photos.filter(p => p)), 100);
+    const img2 = photos[1] || '/storage/images/default_photo.jpg';
+    const img3 = photos[2] || '/storage/images/default_photo.jpg';
+
+    const tags = (data.tags && data.tags.length > 0)
+        ? [...new Set(data.tags)].map(tag => `<span class="tag">#${tag}</span>`).join('')
+        : '';
+
+    const ingredients = (data.ingredients || []).map(i => `<li>${i}</li>`).join('');
+    const steps       = (data.steps || []).map(s => `<li>${s}</li>`).join('');
+
+    const editLabel   = t('recipe.edit');
+    const deleteLabel = t('recipe.delete');
+
+    container.innerHTML = `
+        <div class="image-grid">
+            <img src="${img1}" onerror="this.src='/storage/images/default_photo.jpg';" class="img-large" alt="${data.title}">
+            <div class="img-right">
+                <img src="${img2}" onerror="this.src='/storage/images/default_photo.jpg';">
+                <img src="${img3}" onerror="this.src='/storage/images/default_photo.jpg';">
+            </div>
+        </div>
+
+        <div class="recipe-content">
+            <div class="save-container">
+                <button class="save-btn" onclick="openTableModal()">
+                    <i class="fas fa-bookmark"></i> ${t('recipe.saveBtn')}
+                </button>
+                <div id="owner-actions" style="display:none;gap:8px;">
+                    <button class="edit-recipe-btn" onclick="window.openEditModal()">
+                        <i class="fas fa-edit"></i> ${editLabel}
+                    </button>
+                    <button class="delete-recipe-btn" onclick="window.deleteRecipe()">
+                        <i class="fas fa-trash"></i> ${deleteLabel}
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modal tables -->
+            <div id="table-modal" class="modal" style="display:none;">
+                <div class="modal-content" style="position:relative;">
+                    <button class="modal-close-btn" onclick="closeTableModal()" title="Cerrar">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <h3>${t('recipe.saveTitle')}</h3>
+                    <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;" data-i18n="recipe.chooseTable">Elige una table</p>
+                    <div id="modal-tables-container"></div>
+                </div>
+            </div>
+
+            <h1>${data.title}</h1>
+
+            <div class="recipe-detail-meta">
+                <div class="recipe-detail-author" id="detail-author-btn">
+                    <i class="fas fa-user-circle"></i>
+                    <span>${data.author || t('recipe.anonymous')}</span>
+                </div>
+                <button class="detail-like-btn ${data.user_liked ? 'liked' : ''}" id="detail-like-btn">
+                    <i class="${data.user_liked ? 'fas' : 'far'} fa-heart"></i>
+                    <span id="detail-like-count">${data.like_count > 0 ? data.like_count : ''}</span>
+                </button>
+            </div>
+            <p class="description">${data.description || 'Sin descripción disponible.'}</p>
+
+            <div class="recipe-columns">
+                <div>
+                    <div class="recipe-section-title"><i class="fas fa-list-ul"></i> ${t('recipe.ingredients')}</div>
+                    <ul>${ingredients}</ul>
+                </div>
+                <div>
+                    <div class="recipe-section-title"><i class="fas fa-utensils"></i> ${t('recipe.steps')}</div>
+                    <ol>${steps}</ol>
+                </div>
+            </div>
+
+            <div class="tags" style="margin-top:18px;">${tags}</div>
+        </div>
+    `;
+
+    // Wire author link
+    const authorBtn = document.getElementById('detail-author-btn');
+    if (authorBtn && data.author_id) {
+        authorBtn.addEventListener('click', () => { window.location.href = '/user/' + data.author_id; });
+    }
+
+    // Wire like button
+    const likeBtn = document.getElementById('detail-like-btn');
+    if (likeBtn) {
+        likeBtn.addEventListener('click', () => toggleDetailLike(data.id));
+    }
+
+    // Mostrar botones Editar/Borrar si soy el autor
+    try {
+        const meRes = await fetch('/user/profile');
+        if (meRes.ok) {
+            const me = await meRes.json();
+            const isAuthor = (data.author_id && me.id === data.author_id)
+                          || (me.username && me.username === data.author);
+            if (isAuthor) {
+                const od = document.getElementById('owner-actions');
+                if (od) od.style.display = 'flex';
+            }
+        }
+    } catch(e) {}
+}
+
+loadRecipe();
+
+// ── Edit & Delete ────────────────────────────────────────────
+window.deleteRecipe = async function() {
+    if (!confirm('¿Seguro que quieres borrar esta receta?')) return;
+    const pubId = window.location.pathname.split('/').pop();
+    const res = await fetch('/publications/delete/' + pubId, { method: 'POST' });
+    if (res.ok) { alert('Receta borrada.'); window.location.href = '/'; }
+    else { const d = await res.json(); alert('Error: ' + (d.error || 'No se pudo borrar')); }
+};
+
+window.openEditModal = function() {
+    const pubId = window.location.pathname.split('/').pop();
+    fetch('/publications/' + pubId).then(r => r.json()).then(d => {
+        document.getElementById('edit-title').value       = d.title || '';
+        document.getElementById('edit-description').value = d.description || '';
+        document.getElementById('edit-ingredients').value = (d.ingredients || []).join('\n');
+        document.getElementById('edit-steps').value       = (d.steps || []).join('\n');
+        document.getElementById('edit-tags').value        = (d.tags || []).join(', ');
+        document.getElementById('edit-modal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    });
+};
+
+window.closeEditModal = function() {
+    document.getElementById('edit-modal').style.display = 'none';
+    document.body.style.overflow = '';
+};
+
+window.saveEdit = async function() {
+    const pubId = window.location.pathname.split('/').pop();
+    const title = document.getElementById('edit-title').value.trim();
+    if (!title) { alert('El título es obligatorio'); return; }
+    const fd = new FormData();
+    fd.append('title', title);
+    fd.append('description', document.getElementById('edit-description').value.trim());
+    fd.append('ingredients', JSON.stringify(document.getElementById('edit-ingredients').value.split('\n').map(s => s.trim()).filter(Boolean)));
+    fd.append('steps',       JSON.stringify(document.getElementById('edit-steps').value.split('\n').map(s => s.trim()).filter(Boolean)));
+    fd.append('tags',        JSON.stringify(document.getElementById('edit-tags').value.split(',').map(s => s.trim()).filter(Boolean)));
+    const res = await fetch('/publications/edit/' + pubId, { method: 'POST', body: fd });
+    if (res.ok) { alert('¡Receta actualizada!'); window.closeEditModal(); window.location.reload(); }
+    else { const d = await res.json(); alert('Error: ' + (d.error || 'No se pudo guardar')); }
+};
+
+// ── Table modal ──────────────────────────────────────────────
+async function openTableModal() {
+    const res = await fetch('/user/profile');
+    if (res.status === 401) { alert(t('recipe.loginSave')); window.location.href = '/auth/login'; return; }
+    const tablesList = await (await fetch('/tables/')).json();
+    const modalContainer = document.getElementById('modal-tables-container');
+    modalContainer.innerHTML = '';
+    if (!tablesList || tablesList.length === 0) {
+        modalContainer.innerHTML = `<p>${t('tables.noTables')}</p>
+            <button onclick="window.location.href='/tables'" class="btn-main" style="margin-top:10px;">
+                ${t('recipe.createTable')}
+            </button>`;
+    } else {
+        tablesList.forEach(table => {
+            const btn = document.createElement('button');
+            btn.className = 'modal-table-btn';
+            btn.innerText = table.name;
+            btn.onclick = () => saveToTable(table.id, table.name);
+            modalContainer.appendChild(btn);
+        });
+    }
+    document.getElementById('table-modal').style.display = 'flex';
+}
+
+function closeTableModal() { document.getElementById('table-modal').style.display = 'none'; }
+
+async function saveToTable(tableId, tableName) {
+    const pubId = window.location.pathname.split('/').pop();
+    const response = await fetch('/tables/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table_id: tableId, publication_id: parseInt(pubId) })
+    });
+    if (response.ok) { alert(`¡Guardado en "${tableName}"!`); closeTableModal(); }
+    else { alert('Esta receta ya está en esa Table.'); }
+}
+
+// ── Lightbox ─────────────────────────────────────────────────
+let _lbImages = [], _lbIndex = 0;
+
+function initLightbox(images) {
+    _lbImages = images.filter(Boolean);
+    document.querySelectorAll('.img-large, .img-right img').forEach((el, i) => {
+        el.style.cursor = 'zoom-in';
+        el.addEventListener('click', () => openLightbox(i));
+    });
+}
+function openLightbox(index) {
+    if (!_lbImages.length) return;
+    _lbIndex = index;
+    document.getElementById('lightbox').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    updateLightbox();
+}
+function updateLightbox() {
+    document.getElementById('lightbox-img').src = _lbImages[_lbIndex];
+    document.getElementById('lightbox-dots').innerHTML = _lbImages.map((_, i) =>
+        `<span class="lb-dot ${i === _lbIndex ? 'active' : ''}" onclick="lightboxGo(${i})"></span>`).join('');
+    document.querySelector('.lightbox-arrow.left').style.opacity  = _lbImages.length > 1 ? '1' : '0';
+    document.querySelector('.lightbox-arrow.right').style.opacity = _lbImages.length > 1 ? '1' : '0';
+}
+function lightboxNav(dir) { _lbIndex = (_lbIndex + dir + _lbImages.length) % _lbImages.length; updateLightbox(); }
+function lightboxGo(i)    { _lbIndex = i; updateLightbox(); }
+function closeLightbox(e) {
+    if (e && e.target !== document.getElementById('lightbox') && !e.target.classList.contains('lightbox-overlay')) return;
+    document.getElementById('lightbox').style.display = 'none';
+    document.body.style.overflow = '';
+}
+let _lbTouchX = null;
+document.addEventListener('DOMContentLoaded', () => {
+    const lb = document.getElementById('lightbox');
+    lb.addEventListener('touchstart', e => { _lbTouchX = e.touches[0].clientX; }, { passive: true });
+    lb.addEventListener('touchend', e => {
+        if (_lbTouchX === null) return;
+        const dx = e.changedTouches[0].clientX - _lbTouchX;
+        if (Math.abs(dx) > 50) lightboxNav(dx < 0 ? 1 : -1);
+        _lbTouchX = null;
+    }, { passive: true });
+    document.addEventListener('keydown', e => {
+        const lb = document.getElementById('lightbox');
+        if (lb.style.display === 'none') return;
+        if (e.key === 'ArrowRight') lightboxNav(1);
+        if (e.key === 'ArrowLeft')  lightboxNav(-1);
+        if (e.key === 'Escape')     { lb.style.display = 'none'; document.body.style.overflow = ''; }
+    });
+});
+
+// ── Like ─────────────────────────────────────────────────────
+async function toggleDetailLike(pubId) {
+    const btn = document.getElementById('detail-like-btn');
+    const cnt = document.getElementById('detail-like-count');
+    const wasLiked = btn.classList.contains('liked');
+    btn.classList.toggle('liked', !wasLiked);
+    btn.querySelector('i').className = wasLiked ? 'far fa-heart' : 'fas fa-heart';
+    try {
+        const res = await fetch(`/likes/${pubId}/toggle`, { method: 'POST' });
+        if (res.status === 401) {
+            btn.classList.toggle('liked', wasLiked);
+            btn.querySelector('i').className = wasLiked ? 'fas fa-heart' : 'far fa-heart';
+            if (confirm(t('home.loginLike'))) window.location.href = '/auth/login';
+            return;
+        }
+        const data = await res.json();
+        btn.classList.toggle('liked', data.liked);
+        btn.querySelector('i').className = data.liked ? 'fas fa-heart' : 'far fa-heart';
+        if (cnt) cnt.textContent = data.count > 0 ? data.count : '';
+    } catch(e) {
+        btn.classList.toggle('liked', wasLiked);
+        btn.querySelector('i').className = wasLiked ? 'fas fa-heart' : 'far fa-heart';
+    }
+}
+</script>
+</body>
+</html>

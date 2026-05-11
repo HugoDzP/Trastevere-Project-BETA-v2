@@ -1,0 +1,38 @@
+<!-- templates/bottom_bar.html -->
+<nav class="bottom-nav">
+    <a href="/"         class="nav-item" title="Inicio">
+        <i class="fa-solid fa-house"></i>
+        <span data-i18n="nav.home">Inicio</span>
+    </a>
+    <a href="/search"   class="nav-item" title="Buscar">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <span data-i18n="nav.search">Buscar</span>
+    </a>
+    <a href="/create"   class="nav-item nav-create" title="Crear receta">
+        <i class="fa-solid fa-plus"></i>
+    </a>
+    <a href="/tables"   class="nav-item" title="Tables">
+        <i class="fa-solid fa-bookmark"></i>
+        <span data-i18n="nav.tables">Tables</span>
+    </a>
+    <a href="/my-profile" class="nav-item" title="Mi Perfil" id="nav-profile-btn">
+        <i class="fa-solid fa-user"></i>
+        <span data-i18n="nav.profile">Perfil</span>
+    </a>
+</nav>
+
+<script>
+(function() {
+    const path = window.location.pathname;
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(item => {
+        const href = item.getAttribute('href');
+        // Mark active for both /my-profile and /user/* paths
+        const isProfile = href === '/my-profile' && (path === '/my-profile' || path.startsWith('/user/'));
+        if (isProfile || (href && href !== '/' && !isProfile && path.startsWith(href))) {
+            item.classList.add('active');
+        } else if (href === '/' && path === '/') {
+            item.classList.add('active');
+        }
+    });
+})();
+</script>

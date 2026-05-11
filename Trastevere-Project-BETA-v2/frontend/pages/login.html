@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="login.title">Iniciar Sesión - Trastevere</title>
+    <link rel="apple-touch-icon" href="/storage/images/touch-icon.png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+    <script src="{{ url_for('static', filename='i18n.js') }}"></script>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-logo" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Trastevere</span>
+            <select onchange="setLang(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:0.8rem;background:white;cursor:pointer;color:var(--text);">
+                <option value="es">🇪🇸 ES</option>
+                <option value="en">🇬🇧 EN</option>
+            </select>
+        </div>
+        <h1 data-i18n="login.welcome">Bienvenido</h1>
+
+        <label for="email" data-i18n="login.email">Email</label>
+        <input type="email" id="email" placeholder="correo@ejemplo.com" data-i18n-placeholder="login.emailPh" required>
+
+        <label for="pass" data-i18n="login.password">Contraseña</label>
+        <input type="password" id="pass" placeholder="Tu contraseña" data-i18n-placeholder="login.passwordPh" required>
+
+        <button onclick="handleLogin()" class="btn-main" data-i18n="login.btn">Entrar</button>
+
+        <p style="text-align:center;margin-top:14px;margin-bottom:4px;font-size:0.85rem;">
+            <a href="/auth/forgot-password" style="color:var(--text-muted);" data-i18n="login.forgotPassword">¿Olvidaste tu contraseña?</a>
+        </p>
+        <p><span data-i18n="login.noAccount">¿No tienes cuenta?</span> <a href="{{ url_for('auth.register') }}" data-i18n="login.register">Regístrate gratis</a></p>
+    </div>
+
+    <script>
+    function setLang(lang) {
+        localStorage.setItem('trastevere_lang', lang);
+        applyLanguage();
+        // Update selector
+        document.querySelector('select').value = lang;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        applyLanguage();
+        const saved = localStorage.getItem('trastevere_lang') || 'es';
+        document.querySelector('select').value = saved;
+    });
+
+    async function handleLogin() {
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('pass').value;
+        const response = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            window.location.href = '/';
+        } else {
+            alert('Error: ' + data.error);
+        }
+    }
+
+    // Permitir Enter en los campos
+    document.addEventListener('keypress', e => {
+        if (e.key === 'Enter') handleLogin();
+    });
+    </script>
+</body>
+</html>

@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil - Trastevere</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="apple-touch-icon" href="/storage/images/touch-icon.png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='profile.css') }}">
+    <script src="{{ url_for('static', filename='i18n.js') }}"></script>
+</head>
+<body>
+    {% include 'top_bar.html' %}
+
+    <div class="profile-container">
+
+        <!-- Vista logueado -->
+        <div id="logged-in-view" style="display:none;">
+            <div class="profile-pic-section">
+                <img id="user-pic" src="/storage/images/default_user.jpg"
+                     alt="Foto de perfil" class="profile-pic">
+                <p class="profile-pic-hint" data-i18n="profile.picHint">Toca tu foto para cambiarla</p>
+                <input type="file" id="pic-input" style="display:none;" accept="image/*">
+            </div>
+
+                        <h2 id="user-name" style="margin-top: 10px; text-align: center; color: var(--primary-color);"></h2>
+
+            <!-- Stats sociales -->
+            <div class="profile-social-stats" id="profile-stats" style="display:none;">
+                <div class="profile-stat" onclick="window.location.href='/user/'+_myUserId">
+                    <span class="profile-stat-num" id="stat-pubs">0</span>
+                    <span class="profile-stat-label" data-i18n="profile.recipes">Recetas</span>
+                </div>
+                <div class="profile-stat-divider"></div>
+                <div class="profile-stat">
+                    <span class="profile-stat-num" id="stat-followers">0</span>
+                    <span class="profile-stat-label" data-i18n="profile.followers">Seguidores</span>
+                </div>
+                <div class="profile-stat-divider"></div>
+                <div class="profile-stat">
+                    <span class="profile-stat-num" id="stat-following">0</span>
+                    <span class="profile-stat-label" data-i18n="profile.following">Siguiendo</span>
+                </div>
+                <div class="profile-stat-divider"></div>
+                <div class="profile-stat">
+                    <span class="profile-stat-num" id="stat-stars">0.0</span>
+                    <span class="profile-stat-label" data-i18n="profile.stars">⭐ Estrellas</span>
+                </div>
+            </div>
+
+            <div class="profile-info">
+                <p><strong data-i18n="profile.email">Email</strong> <span id="user-email"></span></p>
+                <p><strong data-i18n="profile.phone">Teléfono</strong> <input id="user-phone" disabled data-i18n-placeholder="profile.phonePh" placeholder="Sin configurar" class="profile-input"></p>
+                <p><strong data-i18n="profile.dni">DNI</strong> <input id="user-dni" disabled data-i18n-placeholder="profile.phonePh" placeholder="Sin configurar" class="profile-input"></p>
+                <p><strong data-i18n="profile.plan">Plan</strong> <span id="user-sub"></span></p>
+            </div>
+
+            <div class="profile-actions">
+                <button onclick="enableEdit()"><i class="fas fa-edit"></i> <span data-i18n="profile.edit">Editar</span></button>
+                <button onclick="if(_myUserId)window.location.href='/user/'+_myUserId"><i class="fas fa-eye"></i> <span data-i18n="profile.myProfile">Mi perfil</span></button>
+                <button onclick="openAbout()"><i class="fas fa-info-circle"></i> <span data-i18n="profile.info">Info</span></button>
+                <button style="background:#888;" onclick="window.location.href='/auth/logout'">
+                    <i class="fas fa-sign-out-alt"></i> <span data-i18n="profile.logout">Salir</span>
+                </button>
+            </div>
+
+            <div style="text-align:center;margin-top:14px;display:flex;gap:10px;justify-content:center;">
+                <button id="save-btn" style="display:none;" onclick="saveProfile()" class="btn-main">
+                    Guardar cambios
+                </button>
+                <button id="cancel-btn" style="display:none;" onclick="cancelEdit()" class="btn-secondary">
+                    Cancelar
+                </button>
+            </div>
+        </div>
+
+        <!-- Vista invitado -->
+        <div id="guest-view" style="display:none;text-align:center;padding:40px 10px;">
+            <i class="fas fa-utensils" style="font-size:3.5rem;color:var(--primary);opacity:0.3;"></i>
+            <h2 style="font-size:1.5rem;margin:20px 0 10px;"><span data-i18n="profile.joinTitle">¡Únete a Trastevere!</span></h2>
+            <p style="color:var(--text-muted);margin-bottom:28px;" data-i18n="profile.joinSub">Crea tu red de recetas y guarda tus favoritos.</p>
+            <div style="display:flex;flex-direction:column;gap:10px;max-width:280px;margin:0 auto;">
+                <button onclick="window.location.href='/auth/login'" class="btn-main" data-i18n="profile.login">Iniciar Sesión</button>
+                <button onclick="window.location.href='/auth/register'" class="btn-secondary" data-i18n="profile.createAccount">Crear cuenta gratis</button>
+            </div>
+        </div>
+    </div>
+
+
+
+    {% include 'bottom_bar.html' %}
+
+    <script>
+    let _myUserId = null;
+    let _currentProfileData = null;
+
+    async function loadProfile() {
+        try {
+            const response = await fetch('/user/profile');
+            if (response.status === 401) {
+                document.getElementById('guest-view').style.display = 'block';
+                return;
+            }
+            const user = await response.json();
+            document.getElementById('logged-in-view').style.display = 'block';
+            document.getElementById('user-name').innerText  = user.username;
+
+            
+
+            // Stats sociales
+            _myUserId = user.id;
+            fetch('/profiles/' + user.id).then(r=>r.json()).then(p=>{
+                document.getElementById('stat-pubs').textContent      = p.pub_count      || 0;
+                document.getElementById('stat-followers').textContent  = p.follower_count || 0;
+                document.getElementById('stat-following').textContent  = p.following_count|| 0;
+                document.getElementById('stat-stars').textContent      = (p.stars||0).toFixed(1);
+                document.getElementById('profile-stats').style.display = 'flex';
+            }).catch(()=>{});
+            _currentProfileData = user;
+            document.getElementById('user-email').innerText = user.email;
+            document.getElementById('user-phone').value = user.phone_number || '';
+            document.getElementById('user-dni').value   = user.dni || '';
+
+            // Badge plan
+            const planEl = document.getElementById('user-sub');
+            planEl.innerHTML = user.plan === 'PREMIUM'
+                ? `<span class="plan-badge premium">✨ Premium</span>`
+                : `<span class="plan-badge basic">Basic</span>`;
+
+            document.getElementById('user-pic').src = user.profile_pic || '/storage/images/default_user.jpg';
+        } catch (e) {
+            console.error('Error cargando perfil:', e);
+        }
+    }
+
+    function enableEdit() {
+        document.getElementById('user-phone').disabled = false;
+        document.getElementById('user-dni').disabled   = false;
+        document.getElementById('user-phone').focus();
+        document.getElementById('save-btn').style.display   = 'inline-block';
+        document.getElementById('cancel-btn').style.display = 'inline-block';
+    }
+
+    function cancelEdit() {
+        document.getElementById('user-phone').disabled = true;
+        document.getElementById('user-dni').disabled   = true;
+        document.getElementById('save-btn').style.display   = 'none';
+        document.getElementById('cancel-btn').style.display = 'none';
+        // Restaurar los valores originales sin recargar la página
+        document.getElementById('user-phone').value = _currentProfileData?.phone_number || '';
+        document.getElementById('user-dni').value   = _currentProfileData?.dni || '';
+    }
+
+    async function saveProfile() {
+        const data = {
+            phone_number: document.getElementById('user-phone').value,
+            dni: document.getElementById('user-dni').value
+        };
+        const response = await fetch('/user/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            alert(t('profile.updated'));
+            window.location.reload();
+        }
+    }
+
+    // Cambio de foto
+    document.getElementById('user-pic').onclick = () => document.getElementById('pic-input').click();
+    document.getElementById('pic-input').onchange = async function() {
+        const file = this.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('profile_pic', file);
+        const response = await fetch('/user/upload_pic', { method: 'POST', body: formData });
+        if (response.ok) {
+            const data = await response.json();
+            document.getElementById('user-pic').src = data.url;
+        } else {
+            alert(t('profile.uploadError'));
+        }
+    };
+
+    async function openAbout() {
+        const box = document.getElementById('about-box');
+        box.style.display = 'flex';
+        box.style.alignItems = 'center';
+        box.style.justifyContent = 'center';
+        box.style.pointerEvents = 'auto';
+        const response = await fetch('/user/about');
+        const data = await response.json();
+        document.getElementById('about-version').innerText = data.version;
+        document.getElementById('about-build').innerText   = data.build;
+        document.getElementById('about-authors').innerText = data.authors;
+    }
+
+    function closeAbout() {
+        const box = document.getElementById('about-box');
+        box.style.display = 'none';
+        box.style.pointerEvents = 'none';
+    }
+
+    window.onload = loadProfile;
+    </script>
+<!-- About box — modal con overlay (estilos en profile.css) -->
+    <div id="about-box" onclick="if(event.target===this)closeAbout()"
+         style="display:none;pointer-events:none;position:fixed;inset:0;
+                background:rgba(0,0,0,0.45);z-index:3000;
+                align-items:center;justify-content:center;">
+        <div style="background:white;border-radius:16px;padding:28px 24px;max-width:360px;
+                    width:90%;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.18);">
+            <h3 style="margin:0 0 16px;font-size:1.2rem;font-family:Arial,Helvetica,sans-serif;font-weight:700;">ℹ️ About Trastevere</h3>
+            <p style="font-size:0.9rem;margin-bottom:6px;"><strong>Tipo de software:</strong> Apache 2.0</p>
+            <p style="font-size:0.9rem;margin-bottom:6px;"><strong>Versión:</strong> <span id="about-version"></span></p>
+            <p style="font-size:0.9rem;margin-bottom:6px;"><strong>Build:</strong> <span id="about-build"></span></p>
+            <p style="font-size:0.9rem;margin-bottom:20px;"><strong>Autores:</strong> <span id="about-authors"></span></p>
+            <button onclick="closeAbout()" class="btn-main" style="width:100%;margin-top:12px;">Cerrar</button>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="register.title">Registro - Trastevere</title>
+    <link rel="apple-touch-icon" href="/storage/images/touch-icon.png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='auth.css') }}">
+    <script src="{{ url_for('static', filename='i18n.js') }}"></script>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-logo" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Trastevere</span>
+            <select onchange="setLang(this.value)" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:0.8rem;background:white;cursor:pointer;color:var(--text);">
+                <option value="es">🇪🇸 ES</option>
+                <option value="en">🇬🇧 EN</option>
+            </select>
+        </div>
+        <h1 data-i18n="register.heading">Crear Cuenta</h1>
+
+        <label><span data-i18n="register.username">Usuario</span> <span style="color:var(--primary)">*</span></label>
+        <input type="text" id="username" placeholder="Tu nombre de usuario" data-i18n-placeholder="register.usernamePh">
+
+        <label><span data-i18n="register.email">Email</span> <span style="color:var(--primary)">*</span></label>
+        <input type="email" id="email" placeholder="correo@ejemplo.com" data-i18n-placeholder="register.emailPh">
+
+        <label><span data-i18n="register.password">Contraseña</span> <span style="color:var(--primary)">*</span></label>
+        <input type="password" id="password" placeholder="Contraseña segura" data-i18n-placeholder="register.passwordPh">
+
+        <hr class="auth-divider">
+
+        <div class="premium-toggle">
+            <input type="checkbox" id="want-premium" onchange="toggleFields()">
+            <label for="want-premium" data-i18n="register.premium">✨ Activar Plan Premium</label>
+        </div>
+
+        <div id="personal-data">
+            <label><span data-i18n="register.dni">DNI</span> <span id="star-dni" style="color:var(--primary)">*</span></label>
+            <input type="text" id="dni" placeholder="12345678Z" data-i18n-placeholder="register.dniPh">
+
+            <label><span data-i18n="register.phone">Teléfono</span> <span id="star-phone" style="color:var(--primary)">*</span></label>
+            <input type="text" id="phone" placeholder="600000000" data-i18n-placeholder="register.phonePh">
+        </div>
+
+        <div id="premium-fields" style="display:none;">
+            <div style="background:var(--primary-light);border-radius:12px;padding:12px 14px;margin-bottom:10px;">
+                <div style="font-weight:700;color:var(--primary);margin-bottom:4px;" data-i18n="register.premiumTitle">✨ Plan Premium</div>
+                <div style="font-size:0.82rem;color:var(--text-muted);" data-i18n="register.premiumInfo">
+                    Tras registrarte serás redirigido a la pasarela de pago segura (1,99€/mes).
+                </div>
+            </div>
+        </div>
+
+        <button onclick="handleRegister()" class="btn-main" style="margin-top:10px;" data-i18n="register.btn">Registrarse</button>
+        <p><span data-i18n="register.hasAccount">¿Ya tienes cuenta?</span> <a href="{{ url_for('auth.login') }}" data-i18n="register.login">Inicia sesión</a></p>
+    </div>
+
+    <script>
+    function toggleFields() {
+        const isPremium = document.getElementById('want-premium').checked;
+        document.getElementById('premium-fields').style.display = isPremium ? 'block' : 'none';
+        document.getElementById('star-dni').style.display   = isPremium ? 'none' : 'inline';
+        document.getElementById('star-phone').style.display = isPremium ? 'none' : 'inline';
+    }
+
+    function setLang(lang) {
+        localStorage.setItem('trastevere_lang', lang);
+        applyLanguage();
+        document.querySelector('select').value = lang;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        applyLanguage();
+        const saved = localStorage.getItem('trastevere_lang') || 'es';
+        document.querySelector('select').value = saved;
+    });
+
+    async function handleRegister() {
+        const username    = document.getElementById('username').value.trim();
+        const email       = document.getElementById('email').value.trim();
+        const password    = document.getElementById('password').value;
+        const dni         = document.getElementById('dni').value.trim();
+        const phone       = document.getElementById('phone').value.trim();
+        const wantPremium = document.getElementById('want-premium').checked;
+
+        if (!username || !email || !password) {
+            alert(t('alert.fillRequired') || 'Rellena los campos obligatorios.'); return;
+        }
+        if (!wantPremium && (!dni || !phone)) {
+            alert(t('alert.dniPhoneRequired') || 'DNI y Teléfono son obligatorios para el plan gratuito.'); return;
+        }
+
+        try {
+            const response = await fetch('/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username, email, password,
+                    dni: dni || null,
+                    phone_number: phone || null,
+                    wantPremium,
+                    card_number: null,
+                    lang: localStorage.getItem('trastevere_lang') || 'es'
+                })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                if (wantPremium) {
+                    // Redirigir al TPV para activar premium
+                    window.location.href = '/premium/pay';
+                } else {
+                    alert(t('alert.welcome') || '¡Bienvenido a Trastevere!');
+                    window.location.href = "{{ url_for('auth.login') }}";
+                }
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch {
+            alert(t('alert.connectionError') || 'Error de conexión con el servidor.');
+        }
+    }
+    </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trastevere - Inicio</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="apple-touch-icon" href="/storage/images/touch-icon.png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='home.css') }}">
+    <script src="{{ url_for('static', filename='i18n.js') }}"></script>
+</head>
+<body>
+    {% include 'top_bar.html' %}
+
+    <div class="home-search-bar">
+        <i class="fas fa-search"></i>
+        <input type="text" placeholder="Busca recetas, ingredientes..." data-i18n-placeholder="home.searchPlaceholder"
+               onkeypress="if(event.key==='Enter') window.location.href='/search?q='+this.value">
+    </div>
+
+    <div class="category-chips">
+        <div class="chip active" onclick="filterFeed(this)"><span data-i18n="home.chipAll">Todo</span></div>
+        <div class="chip" onclick="filterFeed(this, 'pasta')"><span data-i18n="home.chipPasta">🍝 Pasta</span></div>
+        <div class="chip" onclick="filterFeed(this, 'ensalada', 'salad')"><span data-i18n="home.chipSalads">🥗 Ensaladas</span></div>
+        <div class="chip" onclick="filterFeed(this, 'postre', 'dessert')"><span data-i18n="home.chipDesserts">🍰 Postres</span></div>
+        <div class="chip" onclick="filterFeed(this, 'mexicana', 'mexican')"><span data-i18n="home.chipMexican">🌮 Mexicana</span></div>
+        <div class="chip" onclick="filterFeed(this, 'asiatica', 'asian')"><span data-i18n="home.chipAsian">🍜 Asiática</span></div>
+        <div class="chip" onclick="filterFeed(this, 'carne', 'meat')"><span data-i18n="home.chipMeat">🥩 Carnes</span></div>
+    </div>
+
+    <div class="feed-container" id="feed-list"></div>
+
+    {% include 'bottom_bar.html' %}
+
+    <script>
+    let allRecipes = [];
+
+    let likeData = {};
+
+    async function loadFeed() {
+        try {
+            const response = await fetch('/home/feed');
+            allRecipes = await response.json();
+            renderFeed(allRecipes);
+            // Cargar estados de like en batch
+            if (allRecipes.length > 0) {
+                try {
+                    const lr = await fetch('/likes/batch', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ids: allRecipes.map(r => r.id)})
+                    });
+                    likeData = await lr.json();
+                    Object.keys(likeData).forEach(id => {
+                        const d   = likeData[id];
+                        const btn = document.getElementById('like-btn-' + id);
+                        const cnt = document.getElementById('like-count-' + id);
+                        if (btn) {
+                            btn.classList.toggle('liked', d.liked);
+                            btn.querySelector('i').className = d.liked ? 'fas fa-heart' : 'far fa-heart';
+                        }
+                        if (cnt) cnt.textContent = d.count > 0 ? d.count : '';
+                    });
+                } catch(e) { /* likes no críticos */ }
+            }
+        } catch (error) {
+            console.error('Error al cargar el feed:', error);
+        }
+    }
+
+    async function toggleLike(pubId) {
+        const btn = document.getElementById('like-btn-' + pubId);
+        const cnt = document.getElementById('like-count-' + pubId);
+        if (!btn) return;
+        const wasLiked = btn.classList.contains('liked');
+        btn.classList.toggle('liked', !wasLiked);
+        btn.querySelector('i').className = wasLiked ? 'far fa-heart' : 'fas fa-heart';
+        try {
+            const res = await fetch('/likes/' + pubId + '/toggle', {method: 'POST'});
+            if (res.status === 401) {
+                btn.classList.toggle('liked', wasLiked);
+                btn.querySelector('i').className = wasLiked ? 'fas fa-heart' : 'far fa-heart';
+                if (confirm(t('home.loginLike')))
+                    window.location.href = '/auth/login';
+                return;
+            }
+            const data = await res.json();
+            btn.classList.toggle('liked', data.liked);
+            btn.querySelector('i').className = data.liked ? 'fas fa-heart' : 'far fa-heart';
+            if (cnt) cnt.textContent = data.count > 0 ? data.count : '';
+        } catch(e) {
+            btn.classList.toggle('liked', wasLiked);
+            btn.querySelector('i').className = wasLiked ? 'fas fa-heart' : 'far fa-heart';
+        }
+    }
+
+    function renderFeed(recipes) {
+        const feedList = document.getElementById('feed-list');
+        feedList.innerHTML = '';
+        if (recipes.length === 0) {
+            feedList.innerHTML = '<p class="feed-empty">' + t('home.noRecipes') + '</p>';
+            return;
+        }
+        recipes.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'recipe-card';
+            const imageSrc = item.image || '/storage/images/placeholder.png';
+
+            card.innerHTML = `
+                <img src="${imageSrc}"
+                     onerror="this.onerror=null;this.src='/storage/images/placeholder.png';"
+                     alt="${item.title}" class="recipe-img">
+                <div class="recipe-info">
+                    <h3>${item.title}</h3>
+                    <div class="card-footer">
+                        <div class="recipe-author" id="author-${item.id}">
+                            <i class="fas fa-user-circle"></i>
+                            <span>${item.author || t('home.anonymous')}</span>
+                        </div>
+                        <button class="like-btn" id="like-btn-${item.id}">
+                            <i class="far fa-heart"></i>
+                            <span id="like-count-${item.id}"></span>
+                        </button>
+                    </div>
+                </div>`;
+
+            // Click tarjeta → receta
+            card.addEventListener('click', () => {
+                window.location.href = '/publications/view/' + item.id;
+            });
+
+            // Click autor → perfil
+            const authorEl = card.querySelector('.recipe-author');
+            if (authorEl) {
+                authorEl.style.cursor = 'pointer';
+                authorEl.addEventListener('click', e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.location.href = '/user/' + item.author_id;
+                }, true);  // useCapture:true — fires before card click
+            }
+
+            // Click like → toggle (sin propagar)
+            card.querySelector('.like-btn').addEventListener('click', e => {
+                e.stopPropagation();
+                toggleLike(item.id);
+            });
+
+            feedList.appendChild(card);
+        });
+    }
+
+    function filterFeed(chipEl, ...keywords) {
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        chipEl.classList.add('active');
+        if (!keywords.length || !keywords[0]) { renderFeed(allRecipes); return; }
+        const kws = keywords.map(normalize);
+        const filtered = allRecipes.filter(item => {
+            const inTitle = kws.some(kw => normalize(item.title || '').includes(kw));
+            const inTags  = Array.isArray(item.tags) &&
+                            item.tags.some(t => kws.some(kw => normalize(String(t)).includes(kw)));
+            return inTitle || inTags;
+        });
+        renderFeed(filtered);
+    }
+
+    function normalize(str) {
+        return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+
+    // DOMContentLoaded en lugar de window.onload para evitar conflictos con top_bar.html
+    document.addEventListener('DOMContentLoaded', loadFeed);
+    </script>
+</body>
+</html>

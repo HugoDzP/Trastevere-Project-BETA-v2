@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="tables.title">Mis Tables - Trastevere</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="apple-touch-icon" href="/storage/images/touch-icon.png">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='profile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='tables.css') }}">
+    <script src="{{ url_for('static', filename='i18n.js') }}"></script>
+</head>
+<body>
+
+{% include 'top_bar.html' %}
+
+<div class="profile-container tables-main-wrapper">
+
+    <div id="tables-logged-view" style="display:none;">
+        <h1 class="tables-title" data-i18n="tables.heading">Mis Tables</h1>
+
+        <div class="create-table-form">
+            <input id="new-table-name" placeholder="Nombre de la nueva table" data-i18n-placeholder="tables.newPh">
+            <button onclick="createTable()" class="btn-main" data-i18n="tables.create">Crear</button>
+        </div>
+
+        <div id="tables-container" class="tables-container"></div>
+    </div>
+
+    <div id="tables-guest-view" style="display:none;text-align:center;padding:40px 10px;">
+        <i class="fas fa-layer-group" style="font-size:3.5rem;color:var(--primary);opacity:0.3;"></i>
+        <h2 style="font-size:1.5rem;margin:20px 0 10px;" data-i18n="tables.organize">Organiza tus colecciones</h2>
+        <p style="color:var(--text-muted);margin-bottom:28px;">
+            <span data-i18n="tables.guestSub">Inicia sesión para crear Tables y guardar tus recetas favoritas.</span>
+        </p>
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:280px;margin:0 auto;">
+            <button onclick="window.location.href='/auth/login'" class="btn-main" data-i18n="tables.login">Iniciar Sesión</button>
+            <button onclick="window.location.href='/auth/register'" class="btn-secondary" data-i18n="tables.createAccount">Crear cuenta gratis</button>
+        </div>
+    </div>
+</div>
+
+{% include 'bottom_bar.html' %}
+
+<script>
+async function loadTables() {
+    try {
+        const res = await fetch('/tables/');
+        if (res.status === 401) {
+            document.getElementById('tables-logged-view').style.display = 'none';
+            document.getElementById('tables-guest-view').style.display  = 'block';
+            return;
+        }
+        const tables = await res.json();
+        document.getElementById('tables-guest-view').style.display  = 'none';
+        document.getElementById('tables-logged-view').style.display = 'block';
+
+        const container = document.getElementById('tables-container');
+        container.innerHTML = '';
+
+        if (tables.length === 0) {
+            container.innerHTML = `<p style="text-align:center;color:var(--text-muted);margin-top:20px;">
+                ${t('tables.noTables')}
+            </p>`;
+            return;
+        }
+
+        tables.forEach(table => {
+            const previews = table.previews || [];
+            const img1 = previews[0] || '/storage/images/default_photo.jpg';
+            const img2 = previews[1] || '/storage/images/default_photo.jpg';
+            const img3 = previews[2] || '/storage/images/default_photo.jpg';
+
+            const card = document.createElement('div');
+            card.className = 'table-card';
+            card.innerHTML = `
+                <div class="table-header">
+                    <h2>${table.name}</h2>
+                    <button class="delete-table-btn" onclick="deleteTable(${table.id}); event.stopPropagation();">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div class="table-preview" onclick="window.location.href='/tables/view/${table.id}'">
+                    <div class="table-left">
+                        <img src="${img1}" onerror="this.src='/storage/images/default_photo.jpg'">
+                    </div>
+                    <div class="table-right">
+                        <img src="${img2}" onerror="this.src='/storage/images/default_photo.jpg'">
+                        <img src="${img3}" onerror="this.src='/storage/images/default_photo.jpg'">
+                    </div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    } catch (e) {
+        console.error('Error cargando tables:', e);
+    }
+}
+
+async function createTable() {
+    const nameInput = document.getElementById('new-table-name');
+    const name = nameInput.value.trim();
+    if (!name) { alert('Escribe un nombre para la table'); return; }
+
+    const res = await fetch('/tables/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    });
+    if (res.ok) { nameInput.value = ''; loadTables(); }
+    else alert('Error al crear la table');
+}
+
+async function deleteTable(id) {
+    if (!confirm('¿Seguro que quieres borrar esta table y todo su contenido?')) return;
+    const res = await fetch('/tables/delete/' + id, { method: 'DELETE' });
+    if (res.ok) loadTables();
+}
+
+window.onload = loadTables;
+</script>
+
+</body>
+</html>

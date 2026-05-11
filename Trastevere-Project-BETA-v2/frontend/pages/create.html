@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="create.title">Crear receta - Trastevere</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='profile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='create.css') }}">
+    <script src="{{ url_for('static', filename='i18n.js') }}"></script>
+    <link rel="apple-touch-icon" href="/storage/images/touch-icon.png">
+</head>
+<body>
+
+{% include 'top_bar.html' %}
+
+<div class="profile-container create-recipe-card">
+
+    <div id="create-logged-view" style="display:none;">
+        <h1 data-i18n="create.heading">Nueva Receta</h1>
+
+        <!-- Grid de imágenes -->
+        <div class="image-grid">
+            <label class="img-upload large" id="preview_container_0">
+                <input type="file" id="file_0" accept="image/*" onchange="previewImage(0)">
+                <span class="plus-icon"><i class="fas fa-camera"></i></span>
+                <span class="img-required-badge">*</span>
+            </label>
+            <div class="right-images">
+                <label class="img-upload" id="preview_container_1">
+                    <input type="file" id="file_1" accept="image/*" onchange="previewImage(1)">
+                    <span class="plus-icon"><i class="fas fa-plus"></i></span>
+                </label>
+                <label class="img-upload" id="preview_container_2">
+                    <input type="file" id="file_2" accept="image/*" onchange="previewImage(2)">
+                    <span class="plus-icon"><i class="fas fa-plus"></i></span>
+                </label>
+            </div>
+        </div>
+        <p class="field-hint" data-i18n="create.photoHint">* Al menos una foto es obligatoria</p>
+
+        <input class="title-input" id="title" placeholder="Título de la receta *" data-i18n-placeholder="create.titlePh" required>
+        <textarea class="description-input" id="description" placeholder="Cuéntanos sobre tu plato... *" data-i18n-placeholder="create.descPh"></textarea>
+
+        <!-- Ingredientes estructurados -->
+        <span class="section-label"><span data-i18n="create.ingredients">Ingredientes</span> <span style="color:var(--primary)">*</span></span>
+        <div id="ingredients"></div>
+        <button onclick="addIngredient()" class="btn-add-item" data-i18n="create.addIngr">+ Añadir ingrediente</button>
+
+        <span class="section-label"><span data-i18n="create.tags">Tags</span></span>
+        <input class="tags-input" id="tags" placeholder="Ej: pasta, italiano, rápido" data-i18n-placeholder="create.tagsPh">
+
+        <span class="section-label"><span data-i18n="create.steps">Pasos de preparación</span> <span style="color:var(--primary)">*</span></span>
+        <div id="steps"></div>
+        <button onclick="addStep()" class="btn-add-item" data-i18n="create.addStep">+ Añadir paso</button>
+
+        <div id="draft-banner" style="display:none;background:var(--primary-light);border:1.5px dashed var(--primary);
+             border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:0.85rem;
+             color:var(--primary);align-items:center;gap:8px;">
+            💾 <strong>Continuando borrador</strong> — Al publicar se eliminará de Borradores automáticamente.
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px;">
+            <button class="publish-btn" onclick="publishRecipe()" data-i18n="create.publish" style="flex:1;min-width:180px;">🍅 Publicar Receta</button>
+            <button onclick="saveDraft()"
+                    style="flex:1;min-width:180px;padding:12px 20px;border:2px dashed var(--primary);
+                           background:var(--primary-light);color:var(--primary);border-radius:12px;
+                           font-family:var(--font-body);font-size:0.95rem;font-weight:700;cursor:pointer;
+                           transition:all 0.2s;">
+                    <span data-i18n="create.saveDraft">Guardar borrador</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="create-guest-view" style="display:none; text-align:center; padding:40px 10px;">
+        <i class="fas fa-utensils" style="font-size:4rem;color:var(--primary);opacity:0.3;"></i>
+        <h2 style="font-size:1.6rem;margin:20px 0 10px;">¡Comparte tu talento!</h2>
+        <p style="color:var(--text-muted);margin-bottom:30px;">Inicia sesión para subir tus propias recetas.</p>
+        <div style="display:flex;flex-direction:column;gap:12px;max-width:300px;margin:0 auto;">
+            <button onclick="window.location.href='/auth/login'" class="btn-main" data-i18n="create.login">Iniciar Sesión</button>
+            <button onclick="window.location.href='/auth/register'" class="btn-secondary" data-i18n="create.createAccount">Crear cuenta gratis</button>
+        </div>
+    </div>
+</div>
+
+{% include 'bottom_bar.html' %}
+
+<script>
+function getUnits() {
+    const lang = localStorage.getItem('trastevere_lang') || 'es';
+    if (lang === 'en') {
+        return [
+            { value: 'g',        label: 'g' },
+            { value: 'kg',       label: 'kg' },
+            { value: 'lb',       label: 'lb' },
+            { value: 'ml',       label: 'ml' },
+            { value: 'l',        label: 'l' },
+            { value: 'tsp',      label: 'tsp' },
+            { value: 'tbsp',     label: 'tbsp' },
+            { value: 'cup',      label: 'cup' },
+            { value: 'unit',     label: 'unit(s)' },
+            { value: 'slice',    label: 'slice(s)' },
+            { value: 'fillet',   label: 'fillet(s)' },
+            { value: 'to taste', label: 'to taste' },
+            { value: 'pinch',    label: 'pinch' },
+            { value: 'cloves',   label: 'cloves' },
+        ];
+    }
+    return [
+        { value: 'g',          label: 'g' },
+        { value: 'kg',         label: 'kg' },
+        { value: 'libra/s',    label: 'libra/s' },
+        { value: 'ml',         label: 'ml' },
+        { value: 'l',          label: 'l' },
+        { value: 'cucharadita',label: 'cucharadita' },
+        { value: 'cucharada',  label: 'cucharada' },
+        { value: 'taza',       label: 'taza' },
+        { value: 'unidad/es',  label: 'unidad/es' },
+        { value: 'loncha/s',   label: 'loncha/s' },
+        { value: 'filete/s',   label: 'filete/s' },
+        { value: 'al gusto',   label: 'al gusto' },
+        { value: 'pizca',      label: 'pizca' },
+        { value: 'dientes',    label: 'dientes' },
+    ];
+}
+
+async function checkAccess() {
+    try {
+        const r = await fetch('/user/profile');
+        if (r.status === 401) {
+            document.getElementById('create-guest-view').style.display = 'block';
+        } else {
+            document.getElementById('create-logged-view').style.display = 'block';
+            applyLanguage();
+            addIngredient();
+            addStep();
+            loadDraftIfAny();
+        }
+    } catch { document.getElementById('create-guest-view').style.display = 'block'; }
+}
+
+function previewImage(index) {
+    const fileInput = document.getElementById(`file_${index}`);
+    const container = document.getElementById(`preview_container_${index}`);
+    const plusIcon  = container.querySelector('.plus-icon');
+    if (fileInput.files && fileInput.files[0]) {
+        const reader = new FileReader();
+        reader.onload = e => {
+            container.querySelector('.preview-img-file')?.remove();
+            plusIcon.style.opacity = '0';
+            const img = document.createElement('img');
+            img.src = e.target.result;
+            img.className = 'preview-img-file';
+            container.appendChild(img);
+        };
+        reader.readAsDataURL(fileInput.files[0]);
+    }
+}
+
+function addIngredient() {
+    const div = document.createElement('div');
+    div.className = 'ingredient-row';
+    const units = getUnits();
+    const unitOptions = units.map(u => `<option value="${u.value}">${u.label}</option>`).join('');
+    const lang = localStorage.getItem('trastevere_lang') || 'es';
+    const qtyPh  = lang === 'en' ? 'Qty.'       : 'Cant.';
+    const ingrPh = lang === 'en' ? 'Ingredient' : 'Ingrediente';
+    div.innerHTML = `
+        <input type="number" class="ingr-qty" placeholder="${qtyPh}" min="0" step="any">
+        <select class="ingr-unit" onchange="toggleQtyForUnit(this)">${unitOptions}</select>
+        <input type="text" class="ingr-name" placeholder="${ingrPh}">
+        <button class="ingr-remove" onclick="this.parentElement.remove()" title="Eliminar">
+            <i class="fas fa-times"></i>
+        </button>`;
+    document.getElementById('ingredients').appendChild(div);
+}
+
+function toggleQtyForUnit(selectEl) {
+    const tasteValues = ['al gusto', 'to taste'];
+    const qtyInput = selectEl.parentElement.querySelector('.ingr-qty');
+    if (tasteValues.includes(selectEl.value)) {
+        qtyInput.value = '';
+        qtyInput.disabled = true;
+        qtyInput.style.opacity = '0.35';
+        qtyInput.style.cursor = 'not-allowed';
+    } else {
+        qtyInput.disabled = false;
+        qtyInput.style.opacity = '1';
+        qtyInput.style.cursor = '';
+    }
+}
+
+function addStep() {
+    const n   = document.getElementById('steps').children.length + 1;
+    const div = document.createElement('div');
+    div.className = 'step-row';
+    const stepLang = localStorage.getItem('trastevere_lang') || 'es';
+    const stepPh = stepLang === 'en' ? 'Describe the step' : 'Describe el paso';
+    div.innerHTML = `
+        <span class="step-num">${n}</span>
+        <input type="text" class="step-input" placeholder="${stepPh}">
+        <button class="ingr-remove" onclick="removeStep(this)" title="Eliminar">
+            <i class="fas fa-times"></i>
+        </button>`;
+    document.getElementById('steps').appendChild(div);
+}
+
+function removeStep(btn) {
+    btn.parentElement.remove();
+    // Renumerar
+    document.querySelectorAll('.step-num').forEach((el, i) => el.textContent = i + 1);
+}
+
+function loadDraftIfAny() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (!urlParams.get('draft')) return;
+    const raw = sessionStorage.getItem('draft_data');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    sessionStorage.removeItem('draft_data');
+    window._draftId = d.id;
+    const banner = document.getElementById('draft-banner');
+    if (banner) banner.style.display = 'flex';
+    document.getElementById('title').value       = d.title || '';
+    document.getElementById('description').value = d.description || '';
+    document.getElementById('tags').value        = (d.tags || []).join(', ');
+    const ingrContainer = document.getElementById('ingredients');
+    ingrContainer.innerHTML = '';
+    if (d.ingredients && d.ingredients.length > 0) {
+        d.ingredients.forEach(ingr => {
+            addIngredient();
+            const rows = ingrContainer.querySelectorAll('.ingredient-row');
+            rows[rows.length-1].querySelector('.ingr-name').value = ingr;
+        });
+    } else { addIngredient(); }
+    const stepsContainer = document.getElementById('steps');
+    stepsContainer.innerHTML = '';
+    if (d.steps && d.steps.length > 0) {
+        d.steps.forEach(step => {
+            addStep();
+            const rows = stepsContainer.querySelectorAll('.step-row');
+            rows[rows.length-1].querySelector('.step-input').value = step;
+        });
+    } else { addStep(); }
+
+    // Precargar imágenes del borrador
+    if (d.images && d.images.length > 0) {
+        d.images.forEach((url, i) => {
+            if (!url || url.includes('default_photo')) return;
+            const container = document.getElementById(`preview_container_${i}`);
+            if (!container) return;
+            const plusIcon = container.querySelector('.plus-icon');
+            container.querySelector('.preview-img-file')?.remove();
+            if (plusIcon) plusIcon.style.opacity = '0';
+            const img = document.createElement('img');
+            img.src = url;
+            img.className = 'preview-img-file';
+            img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit;';
+            container.appendChild(img);
+            container.dataset.existingUrl = url;
+        });
+    }
+}
+
+async function saveDraft() {
+    const title = document.getElementById('title').value.trim();
+    if (!title) {
+        alert('El título es obligatorio para guardar el borrador.');
+        return;
+    }
+    const ingredientRows = document.querySelectorAll('.ingredient-row');
+    const ingredients = [];
+    ingredientRows.forEach(row => {
+        const qty  = row.querySelector('.ingr-qty').value.trim();
+        const unit = row.querySelector('.ingr-unit').value;
+        const name = row.querySelector('.ingr-name').value.trim();
+        if (name) ingredients.push(qty ? `${qty} ${unit} ${name}` : name);
+    });
+    const steps    = [...document.querySelectorAll('.step-input')].map(s => s.value.trim()).filter(Boolean);
+    const tagsRaw  = document.getElementById('tags').value;
+    const tagsArr  = tagsRaw.split(',').map(s => s.trim()).filter(Boolean);
+    const desc     = document.getElementById('description').value.trim();
+    const formData = new FormData();
+    formData.append('title',       title);
+    formData.append('description', desc);
+    formData.append('tags',        JSON.stringify(tagsArr));
+    formData.append('ingredients', JSON.stringify(ingredients));
+    formData.append('steps',       JSON.stringify(steps));
+    formData.append('lang',        localStorage.getItem('trastevere_lang') || 'es');
+    for (let i = 0; i < 3; i++) {
+        const fi = document.getElementById(`file_${i}`);
+        if (fi?.files.length > 0) {
+            formData.append(`file_${i}`, fi.files[0]);
+        } else {
+            const container = document.getElementById(`preview_container_${i}`);
+            if (container && container.dataset.existingUrl) {
+                formData.append(`existing_url_${i}`, container.dataset.existingUrl);
+            }
+        }
+    }
+    // Bloquear botones para evitar duplicados
+    const draftBtn = document.querySelector('button[onclick="saveDraft()"]');
+    const pubBtn   = document.querySelector('button[onclick="publishRecipe()"]');
+    if (draftBtn) { draftBtn.disabled = true; draftBtn.style.opacity = '0.6'; }
+    if (pubBtn)   { pubBtn.disabled   = true; pubBtn.style.opacity   = '0.6'; }
+
+    try {
+        // Si ya era un borrador, borrar el anterior antes de crear el nuevo
+        if (window._draftId) {
+            await fetch('/publications/delete/' + window._draftId, { method: 'POST' });
+            window._draftId = null;
+        }
+        const response = await fetch('/publications/save-draft', { method: 'POST', body: formData });
+        const result   = await response.json();
+        if (response.ok) {
+            alert('💾 Borrador guardado en tu Table "Borradores". ¡Puedes continuarlo cuando quieras!');
+            window.location.href = '/';
+        } else {
+            alert('Error: ' + (result.error || 'No se pudo guardar el borrador'));
+        }
+    } catch { alert('Error de conexión con el servidor.'); }
+}
+
+async function publishRecipe() {
+    const title       = document.getElementById('title').value.trim();
+    const description = document.getElementById('description').value.trim();
+
+    // Recoger ingredientes estructurados
+    const ingredientRows = document.querySelectorAll('.ingredient-row');
+    const ingredients = [];
+    ingredientRows.forEach(row => {
+        const qty  = row.querySelector('.ingr-qty').value.trim();
+        const unit = row.querySelector('.ingr-unit').value;
+        const name = row.querySelector('.ingr-name').value.trim();
+        if (name) ingredients.push(qty ? `${qty} ${unit} ${name}` : name);
+    });
+
+    const steps = [...document.querySelectorAll('.step-input')]
+        .map(s => s.value.trim()).filter(Boolean);
+
+    // Validaciones
+    const hasPhoto = [0,1,2].some(i => {
+        const fi = document.getElementById(`file_${i}`);
+        return fi && fi.files.length > 0;
+    });
+
+    const errors = [];
+    if (!title)           errors.push('El título es obligatorio');
+    if (!description)     errors.push('La descripción es obligatoria');
+    if (!hasPhoto)        errors.push('Añade al menos una foto');
+    if (ingredients.length === 0) errors.push('Añade al menos un ingrediente');
+    if (steps.length === 0)       errors.push('Añade al menos un paso');
+
+    if (errors.length > 0) {
+        alert(t('create.errorFix') + '\n\n• ' + errors.join('\n• '));
+        return;
+    }
+
+    const tagsRaw  = document.getElementById('tags').value;
+    const tagsArray = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+
+    const formData = new FormData();
+    formData.append('title',       title);
+    formData.append('description', description);
+    formData.append('tags',        JSON.stringify(tagsArray));
+    formData.append('ingredients', JSON.stringify(ingredients));
+    formData.append('steps',       JSON.stringify(steps));
+
+    for (let i = 0; i < 3; i++) {
+        const fi = document.getElementById(`file_${i}`);
+        if (fi?.files.length > 0) {
+            formData.append(`file_${i}`, fi.files[0]);
+        } else {
+            const container = document.getElementById(`preview_container_${i}`);
+            if (container && container.dataset.existingUrl) {
+                formData.append(`existing_url_${i}`, container.dataset.existingUrl);
+            }
+        }
+    }
+
+    // Bloquear botones para evitar duplicados
+    const draftBtnP = document.querySelector('button[onclick="saveDraft()"]');
+    const pubBtnP   = document.querySelector('button[onclick="publishRecipe()"]');
+    if (draftBtnP) { draftBtnP.disabled = true; draftBtnP.style.opacity = '0.6'; }
+    if (pubBtnP)   { pubBtnP.disabled   = true; pubBtnP.style.opacity   = '0.6'; }
+
+    try {
+        const response = await fetch('/publications/create', { method: 'POST', body: formData });
+        const result   = await response.json();
+        if (response.ok) {
+            if (window._draftId) {
+                await fetch('/publications/delete/' + window._draftId, { method: 'POST' });
+            }
+            alert(t('create.success'));
+            window.location.href = '/';
+        } else {
+            alert('Error: ' + (result.error || t('create.publishError')));
+        }
+    } catch { alert(t('create.serverError')); }
+}
+
+document.addEventListener('DOMContentLoaded', checkAccess);
+</script>
+
+</body>
+</html>
